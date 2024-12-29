@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "../lib/lib.h"
 
 int total_part_1 = 0;
 int total_part_2 = 0;

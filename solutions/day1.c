@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "../lib/lib.h"
 
 int total = 0;
 int negative_floor_at = -1;

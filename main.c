@@ -1,12 +1,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "lib/lib.c"
+#include "lib/lib.h"
 
 #if defined(DAY1)
 #include "solutions/day1.c"
 #elif defined(DAY2)
 #include "solutions/day2.c"
+#elif defined(DAY3)
+#include "solutions/day3.c"
 #endif
 
 int main(int argc, char *argv[])
