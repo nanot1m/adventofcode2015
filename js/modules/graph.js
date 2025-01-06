@@ -16,13 +16,13 @@ import { PriorityQueue } from "./priority-queue.js";
 /**
  * @template T
  *
- * @param {(value: T, step: PathItem<T>) => Iterable<T>} getNext
  * @param {T[]} starts
+ * @param {(value: T, step: PathItem<T>) => Iterable<T>} getNext
  * @param {(value: T) => unknown} [valToHash]
  *
  * @returns {IteratorObject<PathItem<T>>}
  */
-export function* dfs(getNext, starts, valToHash) {
+export function* dfs(starts, getNext, valToHash) {
   /** @type {Map<unknown, PathItem<T>>} */
   const visited = new Map();
 
@@ -70,26 +70,28 @@ export function* dfs(getNext, starts, valToHash) {
 /**
  * @template T
  *
+ * @param {Iterable<T>} starts
  * @param {(value: T, step: PathItem<T>) => Iterable<T>} getNext
- * @param {T[]} starts
  * @param {(value: T) => unknown} [valToHash]
  *
  * @returns {IteratorObject<PathItem<T>>}
  */
-export function* bfs(getNext, starts, valToHash) {
+export function* bfs(starts, getNext, valToHash) {
   /** @type {Map<unknown, PathItem<T>>} */
   const visited = new Map();
 
-  const queue = starts.map(
-    (start) =>
-      /** @type {PathItem<T>} */ ({
-        distance: 0,
-        value: start,
-        parent: null,
-        predecessors: [],
-        length: 1,
-      })
-  );
+  /** @type {PathItem<T>[]} */
+  const queue = [];
+
+  for (const start of starts) {
+    queue.push({
+      distance: 0,
+      value: start,
+      parent: null,
+      predecessors: [],
+      length: 1,
+    });
+  }
 
   while (queue.length) {
     const current = queue.shift();
