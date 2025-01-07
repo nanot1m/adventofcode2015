@@ -25,101 +25,146 @@ const spells = [
 ];
 
 /**
- * @returns {Map<string, (typeof spells)[number]>}
+ * @typedef {(typeof spells)[number]} Spell
  */
-const createEffectsMap = () => new Map();
+
+/**
+ * @typedef {{ hp: number; damage: number; }} Boss
+ */
+
+/**
+ * @typedef {{ hp: number; mana: number; armor: number; }} Player
+ */
+
+/**
+ * @param {Map<string, Spell>} [effects]
+ * @returns {Map<string, Spell>}
+ */
+const createEffectsMap = (effects = new Map()) =>
+  new Map(effects.entries().map(([k, v]) => [k, { ...v }]));
+
+/**
+ * @typedef {{ player: Player; boss: Boss; manaSpent: number; effects: Map<string, Spell>; }} State
+ */
+
+/**
+ * @param {State} state
+ * @param {number} spellCost
+ * @returns {IteratorObject<State>}
+ */
+function* getNewState(state, spellCost) {
+  yield {
+    manaSpent: state.manaSpent + spellCost,
+    boss: { ...state.boss },
+    player: { ...state.player, armor: 0 },
+    effects: createEffectsMap(state.effects),
+  };
+}
+
+/**
+ * @param {State} state
+ */
+function applyEffects({ effects, player, boss }) {
+  for (const effect of effects.values()) {
+    if (effect.duration === 0) continue;
+    player.hp += effect.heal;
+    player.armor = effect.armor;
+    boss.hp -= effect.damage;
+    player.mana += effect.mana;
+    effect.duration -= 1;
+    if (effect.duration === 0) {
+      effects.delete(effect.name);
+    }
+  }
+}
+
+/**
+ * @param {State} state
+ * @param {Spell} spell
+ */
+function castSpell({ player, effects, boss }, spell) {
+  player.mana -= spell.cost;
+  if (spell.duration > 0) {
+    effects.set(spell.name, { ...spell });
+  } else {
+    player.hp += spell.heal;
+    player.armor = spell.armor;
+    boss.hp -= spell.damage;
+    player.mana += spell.mana;
+  }
+}
+
+/**
+ * @param {State} state
+ * @param {Spell} spell
+ */
+function canCastSpell(state, spell) {
+  if (state.player.mana < spell.cost) return false;
+  if (state.effects.has(spell.name)) return false;
+  return true;
+}
+
+/**
+ * @param {State} state
+ * @param {Spell} spell
+ * @param {boolean} hardMode
+ */
+function* playerTurn(state, spell, hardMode) {
+  if (hardMode) state.player.hp -= 1;
+  if (state.player.hp <= 0) return;
+  applyEffects(state);
+  castSpell(state, spell);
+  yield state;
+}
+
+/**
+ * @param {State} state
+ */
+function* bossTurn(state) {
+  if (state.boss.hp <= 0) yield state;
+  applyEffects(state);
+  state.player.hp -= Math.max(1, state.boss.damage - state.player.armor);
+  if (state.player.hp > 0) yield state;
+}
+
+/**
+ * @param {State} state
+ */
+function stateToHash({ player, boss, manaSpent, effects }) {
+  const effectsKey = effects
+    .entries()
+    .map(([k, v]) => `${k}:${v.duration}`)
+    .toArray()
+    .join(",");
+  return `${player.hp},${player.mana},${player.armor},${boss.hp},${manaSpent}:${effectsKey}`;
+}
+
+/**
+ * @param {boolean} hardMode
+ * @returns {(state: State) => IteratorObject<State>}
+ */
+function next(hardMode) {
+  return (state) => {
+    if (state.boss.hp <= 0) return Iterator.from([]);
+
+    return spells
+      .values()
+      .filter((spell) => canCastSpell(state, spell))
+      .flatMap((spell) =>
+        getNewState(state, spell.cost)
+          .flatMap((state) => playerTurn(state, spell, hardMode))
+          .flatMap(bossTurn)
+      );
+  };
+}
 
 /**
  * @param {{ hp: number; mana: number; armor: number }} player
  * @param {{ hp: number; damage: number; }} boss
  */
-function simulateFight(player, boss, hardMode = false) {
-  return bfs(
-    [{ player, boss, manaSpent: 0, effects: createEffectsMap() }],
-    ({ player, boss, manaSpent, effects }) => {
-      if (player.hp <= 0) return [];
-      if (boss.hp <= 0) return [];
-
-      const next = [];
-      for (const spell of spells) {
-        if (player.mana < spell.cost) continue;
-
-        // Skip if effect is already active
-        if (effects.has(spell.name) && effects.get(spell.name).duration > 1) {
-          continue;
-        }
-
-        const nextManaSpent = manaSpent + spell.cost;
-        const nextBoss = { ...boss };
-        const nextPlayer = { ...player, armor: 0 };
-
-        // player turn
-        if (hardMode) {
-          nextPlayer.hp -= 1;
-          if (nextPlayer.hp <= 0) continue;
-        }
-
-        // Apply effects
-        const nextEffects = createEffectsMap();
-        for (const effect of effects.values()) {
-          if (effect.duration === 0) continue;
-
-          nextPlayer.hp += effect.heal;
-          nextPlayer.armor = effect.armor;
-          nextBoss.hp -= effect.damage;
-          nextPlayer.mana += effect.mana;
-          nextEffects.set(effect.name, {
-            ...effect,
-            duration: effect.duration - 1,
-          });
-        }
-
-        // Apply spell
-        nextPlayer.mana -= spell.cost;
-        if (spell.duration > 0) {
-          nextEffects.set(spell.name, { ...spell });
-        } else {
-          nextPlayer.hp += spell.heal;
-          nextPlayer.armor = spell.armor;
-          nextBoss.hp -= spell.damage;
-          nextPlayer.mana += spell.mana;
-        }
-
-        if (nextBoss.hp <= 0) {
-          next.push({
-            player: nextPlayer,
-            boss: nextBoss,
-            effects: nextEffects,
-            manaSpent: nextManaSpent,
-          });
-          continue;
-        }
-
-        // boss turn
-        for (const effect of nextEffects.values()) {
-          if (effect.duration === 0) continue;
-
-          nextPlayer.hp += effect.heal;
-          nextPlayer.armor = effect.armor;
-          nextBoss.hp -= effect.damage;
-          nextPlayer.mana += effect.mana;
-          effect.duration -= 1;
-        }
-        nextPlayer.hp -= Math.max(1, nextBoss.damage - nextPlayer.armor);
-
-        next.push({
-          player: nextPlayer,
-          boss: nextBoss,
-          effects: nextEffects,
-          manaSpent: nextManaSpent,
-        });
-      }
-
-      return next;
-    },
-    (cur) =>
-      `${cur.player.hp},${cur.player.mana},${cur.boss.hp},${cur.manaSpent}`
-  );
+function simulateFightVariations(player, boss, hardMode = false) {
+  const state = { player, boss, manaSpent: 0, effects: createEffectsMap() };
+  return bfs([state], next(hardMode), stateToHash);
 }
 
 /**
@@ -128,7 +173,7 @@ function simulateFight(player, boss, hardMode = false) {
 export function part1(input) {
   const player = { hp: 50, mana: 500, armor: 0 };
 
-  return simulateFight(player, input)
+  return simulateFightVariations(player, input)
     .filter((cur) => cur.value.boss.hp <= 0)
     .map((cur) => cur.value.manaSpent)
     .first();
@@ -140,7 +185,7 @@ export function part1(input) {
 export function part2(input) {
   const player = { hp: 50, mana: 500, armor: 0 };
 
-  return simulateFight(player, input, true)
+  return simulateFightVariations(player, input, true)
     .filter((cur) => cur.value.boss.hp <= 0)
     .map((cur) => cur.value.manaSpent)
     .first();
